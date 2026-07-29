@@ -57,6 +57,7 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
     <div class="card c2" onclick="go('cinema')"><div class="ic">🎬</div>سينما وتلفاز</div>
     <div class="card c3" onclick="go('walkie')"><div class="ic">🎙️</div>تخاطب لاسلكي</div>
     <div class="card c4" onclick="go('chat')"><div class="ic">💬</div>محادثات فورية</div>
+    <div class="card c1" onclick="go('files')"><div class="ic">📁</div>مشاركة ملفات</div>
   </div>
   <div class="box">
     <input id="name" placeholder="اسمك">
@@ -160,6 +161,21 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
   </div>
 </section>
 
+<!-- مشاركة ملفات -->
+<section id="files" class="screen">
+  <div class="top"><button class="back" onclick="go('home')">←</button><b>مشاركة ملفات</b><span></span></div>
+
+  <div class="box">
+    <label class="act" style="display:block;text-align:center;cursor:pointer">
+      اختر ملف للمشاركة
+      <input type="file" id="fileInput" style="display:none" onchange="sendFile(event)">
+    </label>
+    <div id="fileProgress" style="color:#94a3b8;font-size:13px;margin-top:10px;display:none">جارٍ الإرسال...</div>
+  </div>
+
+  <div id="filesList" style="width:100%;max-width:430px;display:flex;flex-direction:column;gap:10px;margin-top:14px"></div>
+</section>
+
 <div id="toast"></div>
 
 <script>
@@ -250,6 +266,38 @@ function saveProfile(){
   toast('تم حفظ الملف الشخصي');
 }
 document.addEventListener('DOMContentLoaded', loadProfile);
+
+/* ===== مشاركة ملفات ===== */
+function sendFile(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  if(file.size > 8*1024*1024){ toast('الملف كبير جدًا (الحد 8MB)'); e.target.value=''; return; }
+  $('#fileProgress').style.display='block';
+  const reader = new FileReader();
+  reader.onload = () => {
+    $('#fileProgress').style.display='none';
+    broadcast({type:'file', name:file.name, dataUrl:reader.result, from:myName});
+    addFileEntry(file.name, reader.result, myName, true);
+    toast('تم إرسال الملف');
+    e.target.value='';
+  };
+  reader.onerror = () => { $('#fileProgress').style.display='none'; toast('فشل قراءة الملف'); };
+  reader.readAsDataURL(file);
+}
+function addFileEntry(name, dataUrl, from, mine){
+  const div = document.createElement('div');
+  div.className = 'box';
+  div.style.padding = '14px';
+  div.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:700">${name.replace(/</g,'&lt;')}</div>
+        <div style="color:#94a3b8;font-size:12px">${mine ? 'أرسلته أنت' : 'من '+from.replace(/</g,'&lt;')}</div>
+      </div>
+      <a href="${dataUrl}" download="${name}" class="act" style="width:auto;padding:8px 16px;text-decoration:none;text-align:center">تحميل</a>
+    </div>`;
+  $('#filesList').prepend(div);
+  if(!mine) toast('📁 ملف جديد من '+from);
+}
 document.addEventListener('DOMContentLoaded', loadSettings);
 
 function join(){
@@ -312,6 +360,7 @@ function handle(d,from){
     else{liveFrom=null;$('#watchBox').style.display='none';$('#remVid').style.display='none';}
   }
   if(d.type==='cinema') renderCinema(d.url);
+  if(d.type==='file') addFileEntry(d.name, d.dataUrl, d.from, false);
 }
 
 /* ===== محادثات ===== */
