@@ -58,6 +58,7 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
     <div class="card c3" onclick="go('walkie')"><div class="ic">🎙️</div>تخاطب لاسلكي</div>
     <div class="card c4" onclick="go('chat')"><div class="ic">💬</div>محادثات فورية</div>
     <div class="card c1" onclick="go('files')"><div class="ic">📁</div>مشاركة ملفات</div>
+    <div class="card c3" onclick="go('nearby');renderNearby()"><div class="ic">📍</div>قريبون مني</div>
   </div>
   <div class="box">
     <input id="name" placeholder="اسمك">
@@ -174,6 +175,13 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
   </div>
 
   <div id="filesList" style="width:100%;max-width:430px;display:flex;flex-direction:column;gap:10px;margin-top:14px"></div>
+</section>
+
+<!-- قريبون مني -->
+<section id="nearby" class="screen">
+  <div class="top"><button class="back" onclick="go('home')">←</button><b>قريبون مني</b><span class="status" id="nearbyCount"></span></div>
+  <p class="desc">الأشخاص المتصلين معك حاليًا بنفس الغرفة</p>
+  <div id="nearbyList" style="width:100%;max-width:430px;display:flex;flex-direction:column;gap:10px"></div>
 </section>
 
 <div id="toast"></div>
@@ -298,6 +306,34 @@ function addFileEntry(name, dataUrl, from, mine){
   $('#filesList').prepend(div);
   if(!mine) toast('📁 ملف جديد من '+from);
 }
+
+/* ===== قريبون مني ===== */
+function renderNearby(){
+  const list = $('#nearbyList');
+  list.innerHTML = '';
+  if(!peer || conns.size===0){
+    list.innerHTML = '<div class="box" style="text-align:center;color:#94a3b8">ما فيه أشخاص متصلين حاليًا. اتصل بغرفة من الصفحة الرئيسية أول.</div>';
+    $('#nearbyCount').textContent = '';
+    return;
+  }
+  $('#nearbyCount').textContent = (conns.size+1)+' متصل';
+  const me = document.createElement('div');
+  me.className = 'box';
+  me.style.display = 'flex'; me.style.justifyContent='space-between'; me.style.alignItems='center';
+  me.innerHTML = `<span>👤 ${myName} (أنت)</span><span class="status">متصل</span>`;
+  list.appendChild(me);
+  conns.forEach(({name})=>{
+    const div = document.createElement('div');
+    div.className = 'box';
+    div.style.display = 'flex'; div.style.justifyContent='space-between'; div.style.alignItems='center';
+    div.innerHTML = `<span>👤 ${name.replace(/</g,'&lt;')}</span><button class="act" style="width:auto;padding:8px 16px" onclick="waveTo('${name.replace(/'/g,"")}')">👋 سلّم</button>`;
+    list.appendChild(div);
+  });
+}
+function waveTo(name){
+  broadcast({type:'chat', name:myName, text:'👋 يقول هلا لـ '+name});
+  toast('تم إرسال التحية');
+}
 document.addEventListener('DOMContentLoaded', loadSettings);
 
 function join(){
@@ -337,8 +373,9 @@ function ready(){setStatus('متصل • '+room+' ('+(conns.size+1)+')');toast('
 function addConn(c){
   conns.set(c.peer,{c,name:c.metadata?.name||'?'});
   c.on('data',d=>handle(d,c.peer));
-  c.on('close',()=>{conns.delete(c.peer);setStatus('متصل • '+room+' ('+(conns.size+1)+')');});
+  c.on('close',()=>{conns.delete(c.peer);setStatus('متصل • '+room+' ('+(conns.size+1)+')');if($('#nearby').classList.contains('active'))renderNearby();});
   setStatus('متصل • '+room+' ('+(conns.size+1)+')');
+  if($('#nearby').classList.contains('active'))renderNearby();
 }
 function connectTo(id){if(id!==peer.id&&!conns.has(id)){const c=peer.connect(id,{metadata:{name:myName}});c.on('open',()=>addConn(c));}}
 function broadcast(o){conns.forEach(({c})=>{if(c.open)c.send(o);});}
