@@ -50,6 +50,8 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
 .sqD{background:#1e293b}
 .sq.sel{outline:3px solid #f59e0b;outline-offset:-3px}
 .gStatus{color:#94a3b8;font-size:14px;margin-top:10px;text-align:center}
+.pttRing{position:absolute;top:0;left:0;width:150px;height:150px;border-radius:50%;border:3px solid #16a34a;opacity:0;animation:pttPulse 1.6s ease-out infinite}
+@keyframes pttPulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.5);opacity:0}}
 </style>
 </head>
 <body>
@@ -92,13 +94,28 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
 <section id="walkie" class="screen">
   <div class="top"><button class="back" onclick="go('home')">←</button><b>تخاطب لاسلكي</b><span></span></div>
   <p class="desc">اضغط مع الاستمرار للتحدث، وأفلت للإرسال</p>
-  <button class="ptt" id="ptt">اضغط<br>وتحدث</button>
+  <div id="pttRings" style="position:relative;width:150px;height:150px;margin:40px 0">
+    <div id="ring1" class="pttRing" style="display:none"></div>
+    <div id="ring2" class="pttRing" style="display:none;animation-delay:.4s"></div>
+    <button class="ptt" id="ptt" style="margin:0;position:absolute;top:0;left:0">اضغط<br>وتحدث</button>
+  </div>
+  <div class="gStatus" id="walkieLast">ما فيه رسائل بعد</div>
+  <label class="box" style="display:flex;justify-content:space-between;align-items:center;width:100%;max-width:430px">
+    <span>🔇 كتم الرسائل الصوتية الواردة</span>
+    <input type="checkbox" id="muteIncoming" style="width:auto;padding:0;margin:0">
+  </label>
 </section>
 
 <!-- بث -->
 <section id="live" class="screen">
-  <div class="top"><button class="back" onclick="stopLive();go('home')">←</button><b>بث مباشر</b><span></span></div>
-  <button class="act red" id="liveBtn" onclick="toggleLive()">بدء البث بالكاميرا</button>
+  <div class="top"><button class="back" onclick="stopLive();go('home')">←</button><b>بث مباشر</b><span class="status" id="viewerCount" style="display:none"></span></div>
+  <div class="row" style="max-width:430px">
+    <button class="act red" id="liveBtn" onclick="toggleLive()">بدء البث بالكاميرا</button>
+  </div>
+  <div class="row" id="liveControls" style="max-width:430px;display:none">
+    <button class="act" style="width:auto;padding:12px 18px" onclick="toggleMic()" id="micBtn">🎤 كتم المايك</button>
+    <button class="act" style="width:auto;padding:12px 18px" onclick="switchCamera()">🔄 تبديل الكاميرا</button>
+  </div>
   <video id="myVid" autoplay muted playsinline style="display:none"></video>
   <div id="watchBox" class="box" style="display:none;text-align:center">
     <p id="liveWho"></p>
@@ -614,6 +631,12 @@ function wire(){
   }));
   peer.on('call',call=>{
     if(liveStream) call.answer(liveStream); else call.answer();
+    if(call.metadata && call.metadata.kind==='live'){
+      viewerCalls.push(call);
+      updateViewerCount();
+      addNotif('👀 '+(call.metadata.name||'شخص')+' بدأ يشاهد البث');
+      call.on('close',()=>{ viewerCalls=viewerCalls.filter(c=>c!==call); updateViewerCount(); });
+    }
     call.on('stream',s=>{$('#remVid').srcObject=s;$('#remVid').style.display='block';});
   });
 }
@@ -639,8 +662,12 @@ function handle(d,from){
     addNotif('💬 رسالة من '+d.name+': '+d.text);
   }
   if(d.type==='ptt'){
-    const a=new Audio(URL.createObjectURL(new Blob([d.buf],{type:'audio/webm'})));
-    a.play(); toast('🔊 رسالة صوتية من '+d.name);
+    if(!$('#muteIncoming').checked){
+      const a=new Audio(URL.createObjectURL(new Blob([d.buf],{type:'audio/webm'})));
+      a.play();
+    }
+    toast('🔊 رسالة صوتية من '+d.name);
+    $('#walkieLast').textContent = 'آخر متحدث: '+d.name;
     addNotif('🎙️ رسالة صوتية من '+d.name);
   }
   if(d.type==='live'){
@@ -676,22 +703,35 @@ ptt.onpointerdown=async()=>{
       new Blob(chunks).arrayBuffer().then(buf=>{
         broadcast({type:'ptt',name:myName,buf});
         toast('تم إرسال الرسالة الصوتية');
+        $('#walkieLast').textContent = 'آخر متحدث: أنت';
       });
       s.getTracks().forEach(t=>t.stop());
     };
     rec.start(); ptt.classList.add('on'); ptt.innerHTML='جارٍ<br>التسجيل';
+    $('#ring1').style.display='block'; $('#ring2').style.display='block';
   }catch(e){toast('اسمح بالوصول للميكروفون');}
 };
-const stopPtt=()=>{if(rec&&rec.state!=='inactive'){rec.stop();ptt.classList.remove('on');ptt.innerHTML='اضغط<br>وتحدث';}};
+const stopPtt=()=>{
+  if(rec&&rec.state!=='inactive'){rec.stop();ptt.classList.remove('on');ptt.innerHTML='اضغط<br>وتحدث';}
+  $('#ring1').style.display='none'; $('#ring2').style.display='none';
+};
 ptt.onpointerup=stopPtt; ptt.onpointerleave=stopPtt;
 
 /* ===== بث مباشر ===== */
+let viewerCalls = [];
+let currentFacing = 'user';
+function updateViewerCount(){
+  const v = $('#viewerCount');
+  if(viewerCalls.length>0){ v.textContent = '👀 '+viewerCalls.length; v.style.display='inline-block'; }
+  else v.style.display='none';
+}
 async function toggleLive(){
   if(liveStream){stopLive();return;}
   try{
-    liveStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+    liveStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:currentFacing},audio:true});
     $('#myVid').srcObject=liveStream; $('#myVid').style.display='block';
     $('#liveBtn').textContent='إيقاف البث';
+    $('#liveControls').style.display='flex';
     broadcast({type:'live',on:true,name:myName});
   }catch(e){toast('اسمح بالوصول للكاميرا');}
 }
@@ -699,9 +739,35 @@ function stopLive(){
   if(!liveStream)return;
   liveStream.getTracks().forEach(t=>t.stop()); liveStream=null;
   $('#myVid').style.display='none'; $('#liveBtn').textContent='بدء البث بالكاميرا';
+  $('#liveControls').style.display='none';
+  viewerCalls=[]; updateViewerCount();
   broadcast({type:'live',on:false});
 }
-function watchLive(){if(liveFrom){const c=peer.call(liveFrom,null,{metadata:{kind:'live'}});
+function toggleMic(){
+  if(!liveStream) return;
+  const track = liveStream.getAudioTracks()[0];
+  if(!track) return;
+  track.enabled = !track.enabled;
+  $('#micBtn').textContent = track.enabled ? '🎤 كتم المايك' : '🔇 المايك مكتوم';
+}
+async function switchCamera(){
+  if(!liveStream) return;
+  currentFacing = currentFacing==='user' ? 'environment' : 'user';
+  try{
+    const newStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:currentFacing},audio:true});
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    viewerCalls.forEach(call=>{
+      const sender = call.peerConnection?.getSenders().find(s=>s.track && s.track.kind==='video');
+      if(sender) sender.replaceTrack(newVideoTrack);
+    });
+    liveStream.getVideoTracks().forEach(t=>t.stop());
+    liveStream.removeTrack(liveStream.getVideoTracks()[0]);
+    liveStream.addTrack(newVideoTrack);
+    $('#myVid').srcObject = liveStream;
+    toast('تم تبديل الكاميرا');
+  }catch(e){ toast('تعذر تبديل الكاميرا'); }
+}
+function watchLive(){if(liveFrom){const c=peer.call(liveFrom,null,{metadata:{kind:'live',name:myName}});
   c.on('stream',s=>{$('#remVid').srcObject=s;$('#remVid').style.display='block';});}}
 
 /* ===== سينما ===== */
