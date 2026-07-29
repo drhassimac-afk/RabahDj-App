@@ -45,7 +45,8 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
 
 <!-- الرئيسية -->
 <section id="home" class="screen active">
-  <div class="top" style="justify-content:flex-end">
+  <div class="top" style="justify-content:flex-end;gap:10px">
+    <button class="back" id="profileBtn" onclick="go('profile')" style="overflow:hidden;padding:0">👤</button>
     <button class="back" onclick="go('settings')">⚙️</button>
   </div>
   <h1>Rabah<span>Dj</span></h1>
@@ -135,6 +136,30 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
   <div style="color:#64748b;font-size:12px;margin-top:20px">RabahDj — الإصدار 1.0</div>
 </section>
 
+<!-- ملفي -->
+<section id="profile" class="screen">
+  <div class="top"><button class="back" onclick="go('home')">←</button><b>ملفي</b><span></span></div>
+
+  <div style="margin-top:10px;text-align:center">
+    <div id="avatarWrap" style="width:110px;height:110px;border-radius:50%;background:#2563eb33;border:2px solid #ffffff22;display:flex;align-items:center;justify-content:center;font-size:44px;margin:0 auto;overflow:hidden">
+      <img id="avatarImg" style="display:none;width:100%;height:100%;object-fit:cover">
+      <span id="avatarEmoji">👤</span>
+    </div>
+    <label class="act" style="display:inline-block;width:auto;padding:10px 20px;margin-top:14px;cursor:pointer">
+      تغيير الصورة
+      <input type="file" accept="image/*" id="avatarInput" style="display:none" onchange="pickAvatar(event)">
+    </label>
+  </div>
+
+  <div class="box">
+    <div style="color:#94a3b8;font-size:13px;margin-bottom:6px">الاسم</div>
+    <input id="profileName" placeholder="اسمك">
+    <div style="color:#94a3b8;font-size:13px;margin:14px 0 6px">الحالة / نبذة عني</div>
+    <input id="profileStatus" placeholder="مثلاً: متصل دائمًا 👋">
+    <button class="act" onclick="saveProfile()">حفظ الملف الشخصي</button>
+  </div>
+</section>
+
 <div id="toast"></div>
 
 <script>
@@ -183,6 +208,48 @@ function clearSavedData(){
 function getOptions(){
   return JSON.parse(localStorage.getItem('rabahdj_options') || '{}');
 }
+
+/* ===== ملفي ===== */
+function loadProfile(){
+  const name = localStorage.getItem('rabahdj_name') || '';
+  const status = localStorage.getItem('rabahdj_status') || '';
+  const avatar = localStorage.getItem('rabahdj_avatar') || '';
+  $('#profileName').value = name;
+  $('#profileStatus').value = status;
+  applyAvatar(avatar);
+}
+function applyAvatar(dataUrl){
+  if(dataUrl){
+    $('#avatarImg').src = dataUrl;
+    $('#avatarImg').style.display = 'block';
+    $('#avatarEmoji').style.display = 'none';
+  } else {
+    $('#avatarImg').style.display = 'none';
+    $('#avatarEmoji').style.display = 'block';
+  }
+}
+function pickAvatar(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    localStorage.setItem('rabahdj_avatar', reader.result);
+    applyAvatar(reader.result);
+    toast('تم تحديث الصورة');
+  };
+  reader.readAsDataURL(file);
+}
+function saveProfile(){
+  const n = $('#profileName').value.trim();
+  const s = $('#profileStatus').value.trim();
+  if(!n){ toast('اكتب اسمك أول'); return; }
+  localStorage.setItem('rabahdj_name', n);
+  localStorage.setItem('rabahdj_status', s);
+  $('#name').value = n;
+  $('#settingsName').value = n;
+  toast('تم حفظ الملف الشخصي');
+}
+document.addEventListener('DOMContentLoaded', loadProfile);
 document.addEventListener('DOMContentLoaded', loadSettings);
 
 function join(){
