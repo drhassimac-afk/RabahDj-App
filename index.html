@@ -39,6 +39,17 @@ button.act.green{background:#16a34a}
 .ptt.on{background:#dc2626;border-color:#dc262655}
 video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:10px}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#000c;padding:10px 18px;border-radius:12px;font-size:14px;display:none;z-index:9}
+.gtabs{display:flex;gap:8px;width:100%;max-width:430px;margin-top:10px}
+.gtab{flex:1;padding:12px;border-radius:12px;border:1px solid #ffffff22;background:#ffffff0a;color:#fff;cursor:pointer;font-weight:700}
+.gtab.active{background:#2563eb;border-color:#2563eb}
+.xoBoard{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:260px;margin:20px auto}
+.xoCell{aspect-ratio:1;background:#ffffff12;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:800;cursor:pointer}
+.chessBoard{display:grid;grid-template-columns:repeat(8,1fr);width:100%;max-width:360px;margin:14px auto;border:2px solid #ffffff22;border-radius:8px;overflow:hidden}
+.sq{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer}
+.sqL{background:#334155}
+.sqD{background:#1e293b}
+.sq.sel{outline:3px solid #f59e0b;outline-offset:-3px}
+.gStatus{color:#94a3b8;font-size:14px;margin-top:10px;text-align:center}
 </style>
 </head>
 <body>
@@ -59,6 +70,7 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
     <div class="card c4" onclick="go('chat')"><div class="ic">💬</div>محادثات فورية</div>
     <div class="card c1" onclick="go('files')"><div class="ic">📁</div>مشاركة ملفات</div>
     <div class="card c3" onclick="go('nearby');renderNearby()"><div class="ic">📍</div>قريبون مني</div>
+    <div class="card c2" onclick="go('games');showGame('xo')"><div class="ic">🎮</div>الألعاب</div>
   </div>
   <div class="box">
     <input id="name" placeholder="اسمك">
@@ -182,6 +194,27 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
   <div class="top"><button class="back" onclick="go('home')">←</button><b>قريبون مني</b><span class="status" id="nearbyCount"></span></div>
   <p class="desc">الأشخاص المتصلين معك حاليًا بنفس الغرفة</p>
   <div id="nearbyList" style="width:100%;max-width:430px;display:flex;flex-direction:column;gap:10px"></div>
+</section>
+
+<!-- الألعاب -->
+<section id="games" class="screen">
+  <div class="top"><button class="back" onclick="go('home')">←</button><b>الألعاب</b><span></span></div>
+  <div class="gtabs">
+    <button class="gtab" id="tabXo" onclick="showGame('xo')">إكس أو</button>
+    <button class="gtab" id="tabChess" onclick="showGame('chess')">شطرنج</button>
+  </div>
+
+  <div id="xoGame" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center">
+    <div class="xoBoard" id="xoBoard"></div>
+    <div class="gStatus" id="xoStatus"></div>
+    <button class="act red" style="width:auto;padding:10px 24px;margin-top:10px" onclick="resetXO()">لعبة جديدة</button>
+  </div>
+
+  <div id="chessGame" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center">
+    <div class="chessBoard" id="chessBoard"></div>
+    <div class="gStatus" id="chessStatus"></div>
+    <button class="act red" style="width:auto;padding:10px 24px;margin-top:10px" onclick="resetChess()">لعبة جديدة</button>
+  </div>
 </section>
 
 <div id="toast"></div>
@@ -334,6 +367,172 @@ function waveTo(name){
   broadcast({type:'chat', name:myName, text:'👋 يقول هلا لـ '+name});
   toast('تم إرسال التحية');
 }
+
+/* ===== الألعاب: توجيه الرسائل ===== */
+function handleGameMsg(d){
+  if(d.game==='xo'){
+    if(d.action==='move'){ xoBoardArr[d.index]=d.symbol; xoTurn = d.symbol==='X'?'O':'X'; renderXO(); checkXOWin(); }
+    if(d.action==='reset'){ initXOState(); renderXO(); }
+  }
+  if(d.game==='chess'){
+    if(d.action==='move'){ makeChessMove(d.from,d.to,false); }
+    if(d.action==='reset'){ initChessState(); renderChess(); }
+  }
+}
+function showGame(which){
+  $('#tabXo').classList.toggle('active', which==='xo');
+  $('#tabChess').classList.toggle('active', which==='chess');
+  $('#xoGame').style.display = which==='xo' ? 'flex' : 'none';
+  $('#chessGame').style.display = which==='chess' ? 'flex' : 'none';
+  if(which==='xo') renderXO(); else renderChess();
+}
+
+/* ===== إكس أو ===== */
+let xoBoardArr = Array(9).fill('');
+let xoTurn = 'X';
+function xoMySymbol(){ return isHost ? 'X' : 'O'; }
+function initXOState(){ xoBoardArr = Array(9).fill(''); xoTurn = 'X'; }
+function renderXO(){
+  const b = $('#xoBoard'); b.innerHTML='';
+  xoBoardArr.forEach((v,i)=>{
+    const cell=document.createElement('div');
+    cell.className='xoCell'; cell.textContent=v;
+    cell.onclick=()=>clickXO(i);
+    b.appendChild(cell);
+  });
+  $('#xoStatus').textContent = 'أنت: '+xoMySymbol()+' — دور: '+xoTurn;
+}
+function clickXO(i){
+  if(xoBoardArr[i] || xoTurn!==xoMySymbol()) return;
+  xoBoardArr[i]=xoMySymbol();
+  broadcast({type:'game',game:'xo',action:'move',index:i,symbol:xoMySymbol()});
+  xoTurn = xoMySymbol()==='X'?'O':'X';
+  renderXO(); checkXOWin();
+}
+function checkXOWin(){
+  const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  for(const [a,b,c] of L){
+    if(xoBoardArr[a] && xoBoardArr[a]===xoBoardArr[b] && xoBoardArr[b]===xoBoardArr[c]){
+      $('#xoStatus').textContent = '🏆 فاز '+xoBoardArr[a]+'!';
+      xoTurn = null; return;
+    }
+  }
+  if(xoBoardArr.every(v=>v)){ $('#xoStatus').textContent='🤝 تعادل'; xoTurn=null; }
+}
+function resetXO(){
+  initXOState();
+  broadcast({type:'game',game:'xo',action:'reset'});
+  renderXO();
+}
+
+/* ===== شطرنج مبسط ===== */
+const PIECE_ICON={wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚',bq:'♛',br:'♜',bb:'♝',bn:'♞',bp:'♟'};
+let chessBoardArr = [];
+let chessTurn = 'w';
+let chessSelected = null;
+function chessMyColor(){ return isHost ? 'w' : 'b'; }
+function initChessState(){
+  chessBoardArr = [
+    ['br','bn','bb','bq','bk','bb','bn','br'],
+    ['bp','bp','bp','bp','bp','bp','bp','bp'],
+    ['','','','','','','',''],
+    ['','','','','','','',''],
+    ['','','','','','','',''],
+    ['','','','','','','',''],
+    ['wp','wp','wp','wp','wp','wp','wp','wp'],
+    ['wr','wn','wb','wq','wk','wb','wn','wr']
+  ];
+  chessTurn='w'; chessSelected=null;
+}
+function inBounds(r,c){ return r>=0&&r<8&&c>=0&&c<8; }
+function pieceMoves(r,c){
+  const p=chessBoardArr[r][c]; if(!p) return [];
+  const color=p[0], type=p[1], moves=[];
+  const enemy=t=>t&&t[0]!==color;
+  if(type==='p'){
+    const dir=color==='w'?-1:1, startRow=color==='w'?6:1;
+    if(inBounds(r+dir,c) && !chessBoardArr[r+dir][c]){
+      moves.push([r+dir,c]);
+      if(r===startRow && !chessBoardArr[r+2*dir][c]) moves.push([r+2*dir,c]);
+    }
+    for(const dc of [-1,1]){
+      const nr=r+dir,nc=c+dc;
+      if(inBounds(nr,nc) && enemy(chessBoardArr[nr][nc])) moves.push([nr,nc]);
+    }
+  } else if(type==='n'){
+    for(const [dr,dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]){
+      const nr=r+dr,nc=c+dc;
+      if(inBounds(nr,nc) && !(chessBoardArr[nr][nc] && chessBoardArr[nr][nc][0]===color)) moves.push([nr,nc]);
+    }
+  } else if(type==='k'){
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+      if(!dr&&!dc)continue;
+      const nr=r+dr,nc=c+dc;
+      if(inBounds(nr,nc) && !(chessBoardArr[nr][nc] && chessBoardArr[nr][nc][0]===color)) moves.push([nr,nc]);
+    }
+  } else {
+    const dirs = type==='r'?[[-1,0],[1,0],[0,-1],[0,1]]
+      : type==='b'?[[-1,-1],[-1,1],[1,-1],[1,1]]
+      : [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+    for(const [dr,dc] of dirs){
+      let nr=r+dr,nc=c+dc;
+      while(inBounds(nr,nc)){
+        if(!chessBoardArr[nr][nc]) moves.push([nr,nc]);
+        else { if(chessBoardArr[nr][nc][0]!==color) moves.push([nr,nc]); break; }
+        nr+=dr; nc+=dc;
+      }
+    }
+  }
+  return moves;
+}
+function renderChess(){
+  const b=$('#chessBoard'); b.innerHTML='';
+  const validMoves = chessSelected ? pieceMoves(chessSelected[0],chessSelected[1]) : [];
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      const sq=document.createElement('div');
+      sq.className='sq '+((r+c)%2===0?'sqL':'sqD');
+      if(chessSelected && chessSelected[0]===r && chessSelected[1]===c) sq.classList.add('sel');
+      const p=chessBoardArr[r][c];
+      if(p) sq.textContent=PIECE_ICON[p];
+      sq.onclick=()=>clickChessSq(r,c);
+      b.appendChild(sq);
+    }
+  }
+  $('#chessStatus').textContent = 'أنت: '+(chessMyColor()==='w'?'أبيض':'أسود')+' — دور: '+(chessTurn==='w'?'أبيض':'أسود');
+}
+function clickChessSq(r,c){
+  if(chessTurn!==chessMyColor()) return;
+  if(chessSelected){
+    const moves=pieceMoves(chessSelected[0],chessSelected[1]);
+    const isValid = moves.some(m=>m[0]===r&&m[1]===c);
+    if(isValid){
+      makeChessMove(chessSelected,[r,c],true);
+      return;
+    }
+    if(chessBoardArr[r][c] && chessBoardArr[r][c][0]===chessMyColor()){ chessSelected=[r,c]; renderChess(); return; }
+    chessSelected=null; renderChess(); return;
+  }
+  if(chessBoardArr[r][c] && chessBoardArr[r][c][0]===chessMyColor()){ chessSelected=[r,c]; renderChess(); }
+}
+function makeChessMove(from,to,doBroadcast){
+  const [fr,fc]=from,[tr,tc]=to;
+  let piece=chessBoardArr[fr][fc];
+  chessBoardArr[tr][tc]=piece;
+  chessBoardArr[fr][fc]='';
+  if(piece[1]==='p' && (tr===0||tr===7)) chessBoardArr[tr][tc]=piece[0]+'q';
+  chessTurn = chessTurn==='w'?'b':'w';
+  chessSelected=null;
+  renderChess();
+  if(doBroadcast) broadcast({type:'game',game:'chess',action:'move',from,to});
+}
+function resetChess(){
+  initChessState();
+  broadcast({type:'game',game:'chess',action:'reset'});
+  renderChess();
+}
+initXOState();
+initChessState();
 document.addEventListener('DOMContentLoaded', loadSettings);
 
 function join(){
@@ -398,6 +597,7 @@ function handle(d,from){
   }
   if(d.type==='cinema') renderCinema(d.url);
   if(d.type==='file') addFileEntry(d.name, d.dataUrl, d.from, false);
+  if(d.type==='game') handleGameMsg(d);
 }
 
 /* ===== محادثات ===== */
