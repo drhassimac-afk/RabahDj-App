@@ -58,6 +58,7 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
 <section id="home" class="screen active">
   <div class="top" style="justify-content:flex-end;gap:10px">
     <button class="back" id="profileBtn" onclick="go('profile')" style="overflow:hidden;padding:0">👤</button>
+    <button class="back" onclick="go('notifications');openNotifications()" style="position:relative">🔔<span id="notifBadge" style="display:none;position:absolute;top:-4px;left:-4px;background:#dc2626;color:#fff;font-size:10px;border-radius:10px;padding:1px 5px">0</span></button>
     <button class="back" onclick="go('settings')">⚙️</button>
   </div>
   <h1>Rabah<span>Dj</span></h1>
@@ -215,6 +216,15 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
     <div class="gStatus" id="chessStatus"></div>
     <button class="act red" style="width:auto;padding:10px 24px;margin-top:10px" onclick="resetChess()">لعبة جديدة</button>
   </div>
+</section>
+
+<!-- الإشعارات -->
+<section id="notifications" class="screen">
+  <div class="top"><button class="back" onclick="go('home')">←</button><b>الإشعارات</b><span></span></div>
+  <div class="box" style="width:100%;max-width:430px">
+    <button class="act red" onclick="clearNotifications()">مسح كل الإشعارات</button>
+  </div>
+  <div id="notifList" style="width:100%;max-width:430px;display:flex;flex-direction:column;gap:8px;margin-top:12px"></div>
 </section>
 
 <div id="toast"></div>
@@ -533,6 +543,45 @@ function resetChess(){
 }
 initXOState();
 initChessState();
+
+/* ===== الإشعارات ===== */
+let notifLog = [];
+let notifUnread = 0;
+function addNotif(text){
+  notifLog.unshift({text, time:new Date().toLocaleTimeString('ar',{hour:'2-digit',minute:'2-digit'})});
+  if(notifLog.length>100) notifLog.pop();
+  if(!$('#notifications').classList.contains('active')){
+    notifUnread++;
+    $('#notifBadge').textContent = notifUnread;
+    $('#notifBadge').style.display = 'block';
+  }
+  if($('#notifications').classList.contains('active')) renderNotifications();
+}
+function openNotifications(){
+  notifUnread = 0;
+  $('#notifBadge').style.display = 'none';
+  renderNotifications();
+}
+function renderNotifications(){
+  const list = $('#notifList');
+  list.innerHTML = '';
+  if(notifLog.length===0){
+    list.innerHTML = '<div class="box" style="text-align:center;color:#94a3b8">ما فيه إشعارات بعد</div>';
+    return;
+  }
+  notifLog.forEach(n=>{
+    const div = document.createElement('div');
+    div.className = 'box';
+    div.style.padding = '12px 16px';
+    div.innerHTML = `<div>${n.text}</div><div style="color:#64748b;font-size:11px;margin-top:4px">${n.time}</div>`;
+    list.appendChild(div);
+  });
+}
+function clearNotifications(){
+  notifLog = [];
+  renderNotifications();
+  toast('تم مسح الإشعارات');
+}
 document.addEventListener('DOMContentLoaded', loadSettings);
 
 function join(){
@@ -574,6 +623,7 @@ function addConn(c){
   c.on('data',d=>handle(d,c.peer));
   c.on('close',()=>{conns.delete(c.peer);setStatus('متصل • '+room+' ('+(conns.size+1)+')');if($('#nearby').classList.contains('active'))renderNearby();});
   setStatus('متصل • '+room+' ('+(conns.size+1)+')');
+  addNotif('👋 '+(c.metadata?.name||'شخص')+' انضم للغرفة');
   if($('#nearby').classList.contains('active'))renderNearby();
 }
 function connectTo(id){if(id!==peer.id&&!conns.has(id)){const c=peer.connect(id,{metadata:{name:myName}});c.on('open',()=>addConn(c));}}
@@ -586,17 +636,19 @@ function handle(d,from){
     const opts = getOptions();
     if(opts.vibrate !== false && navigator.vibrate) navigator.vibrate(150);
     if(opts.sound !== false) toast('💬 رسالة من '+d.name);
+    addNotif('💬 رسالة من '+d.name+': '+d.text);
   }
   if(d.type==='ptt'){
     const a=new Audio(URL.createObjectURL(new Blob([d.buf],{type:'audio/webm'})));
     a.play(); toast('🔊 رسالة صوتية من '+d.name);
+    addNotif('🎙️ رسالة صوتية من '+d.name);
   }
   if(d.type==='live'){
-    if(d.on){liveFrom=from;$('#liveWho').textContent=d.name+' يبث الآن';$('#watchBox').style.display='block';toast('📡 بث مباشر من '+d.name);}
+    if(d.on){liveFrom=from;$('#liveWho').textContent=d.name+' يبث الآن';$('#watchBox').style.display='block';toast('📡 بث مباشر من '+d.name);addNotif('📡 '+d.name+' بدأ بث مباشر');}
     else{liveFrom=null;$('#watchBox').style.display='none';$('#remVid').style.display='none';}
   }
-  if(d.type==='cinema') renderCinema(d.url);
-  if(d.type==='file') addFileEntry(d.name, d.dataUrl, d.from, false);
+  if(d.type==='cinema'){ renderCinema(d.url); addNotif('🎬 تمت مشاركة فيديو للمشاهدة الجماعية'); }
+  if(d.type==='file'){ addFileEntry(d.name, d.dataUrl, d.from, false); addNotif('📁 ملف جديد من '+d.from+': '+d.name); }
   if(d.type==='game') handleGameMsg(d);
 }
 
