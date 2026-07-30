@@ -127,6 +127,11 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
 <!-- سينما -->
 <section id="cinema" class="screen">
   <div class="top"><button class="back" onclick="go('home')">←</button><b>سينما وتلفاز</b><span></span></div>
+  <div class="gtabs">
+    <button class="gtab" id="tabMovies" onclick="showCinemaTab('movies')">🎬 أفلام</button>
+    <button class="gtab" id="tabTv" onclick="showCinemaTab('tv')">📺 تلفاز</button>
+    <button class="gtab" id="tabSeries" onclick="showCinemaTab('series')">🍿 مسلسلات</button>
+  </div>
   <div class="box">
     <input id="vidUrl" placeholder="رابط فيديو mp4 أو YouTube">
     <button class="act green" onclick="playCinema(true)">عرض للجميع</button>
@@ -733,7 +738,7 @@ function handle(d,from){
     if(d.on){liveFrom=from;$('#liveWho').textContent=d.name+' يبث الآن';$('#watchBox').style.display='block';toast('📡 بث مباشر من '+d.name);addNotif('📡 '+d.name+' بدأ بث مباشر');}
     else{liveFrom=null;$('#watchBox').style.display='none';$('#remVid').style.display='none';}
   }
-  if(d.type==='cinema'){ renderCinema(d.url, d.name); addNotif('🎬 '+(d.name||'شخص')+' شارك فيديو للمشاهدة الجماعية'); }
+  if(d.type==='cinema'){ renderCinema(d.url, d.name, d.category||'movies'); addNotif('🎬 '+(d.name||'شخص')+' شارك فيديو للمشاهدة الجماعية'); }
   if(d.type==='cinema-ctrl') applyCinemaCtrl(d);
   if(d.type==='file'){ addFileEntry(d.name, d.size, d.dataUrl, d.from, false); addNotif('📁 ملف جديد من '+d.from+': '+d.name); }
   if(d.type==='game') handleGameMsg(d);
@@ -831,21 +836,31 @@ function watchLive(){if(liveFrom){const c=peer.call(liveFrom,null,{metadata:{kin
   c.on('stream',s=>{$('#remVid').srcObject=s;$('#remVid').style.display='block';});}}
 
 /* ===== سينما ===== */
-let cinemaHistory = [];
+let cinemaHistory = {movies:[], tv:[], series:[]};
+let cinemaCategory = 'movies';
 let cinemaIsSharer = false;
+const cinemaCatLabel = {movies:'🎬 أفلام', tv:'📺 تلفاز', series:'🍿 مسلسلات'};
+function showCinemaTab(cat){
+  cinemaCategory = cat;
+  $('#tabMovies').classList.toggle('active', cat==='movies');
+  $('#tabTv').classList.toggle('active', cat==='tv');
+  $('#tabSeries').classList.toggle('active', cat==='series');
+  renderCinemaHistory();
+}
 function playCinema(share){
   const url=$('#vidUrl').value.trim(); if(!url)return;
   cinemaIsSharer = true;
-  renderCinema(url, share ? 'أنت' : null);
+  renderCinema(url, share ? 'أنت' : null, cinemaCategory);
   if(share){
-    broadcast({type:'cinema',url,name:myName});
-    addToCinemaHistory(url);
+    broadcast({type:'cinema',url,name:myName,category:cinemaCategory});
+    addToCinemaHistory(url, cinemaCategory);
   }
 }
-function renderCinema(url, sharedBy){
+function renderCinema(url, sharedBy, category){
+  if(category && category!==cinemaCategory) showCinemaTab(category);
   const box=$('#cinemaBox'); let yt=url.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
   const sharedLabel = $('#cinemaSharedBy');
-  if(sharedBy){ sharedLabel.textContent = '🎬 يعرضه الآن: '+sharedBy; sharedLabel.style.display='block'; }
+  if(sharedBy){ sharedLabel.textContent = cinemaCatLabel[cinemaCategory]+' — يعرضه الآن: '+sharedBy; sharedLabel.style.display='block'; }
   else sharedLabel.style.display='none';
 
   if(yt){
@@ -866,21 +881,24 @@ function applyCinemaCtrl(d){
   if(d.action==='pause'){ v.currentTime=d.time; v.pause(); }
   if(d.action==='seek'){ v.currentTime=d.time; }
 }
-function addToCinemaHistory(url){
-  cinemaHistory = cinemaHistory.filter(u=>u!==url);
-  cinemaHistory.unshift(url);
-  if(cinemaHistory.length>5) cinemaHistory.pop();
+function addToCinemaHistory(url, category){
+  const list = cinemaHistory[category];
+  cinemaHistory[category] = list.filter(u=>u!==url);
+  cinemaHistory[category].unshift(url);
+  if(cinemaHistory[category].length>5) cinemaHistory[category].pop();
   renderCinemaHistory();
 }
 function renderCinemaHistory(){
   const box = $('#cinemaHistoryBox');
-  if(cinemaHistory.length===0){ box.innerHTML=''; return; }
-  box.innerHTML = '<div style="color:#94a3b8;font-size:13px;margin-bottom:8px">آخر الروابط</div>' +
-    cinemaHistory.map(u=>`<div class="box" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+  const list = cinemaHistory[cinemaCategory];
+  if(list.length===0){ box.innerHTML=''; return; }
+  box.innerHTML = '<div style="color:#94a3b8;font-size:13px;margin-bottom:8px">آخر روابط '+cinemaCatLabel[cinemaCategory]+'</div>' +
+    list.map(u=>`<div class="box" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px">${u.replace(/</g,'&lt;')}</span>
       <button class="act" style="width:auto;padding:6px 14px" onclick="$('#vidUrl').value='${u.replace(/'/g,'')}';playCinema(true)">عرض</button>
     </div>`).join('');
 }
+showCinemaTab('movies');
 $('#txt').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
 </script>
 </body>
