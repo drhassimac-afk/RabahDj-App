@@ -453,17 +453,20 @@ function showGame(which){
 /* ===== إكس أو ===== */
 let xoBoardArr = Array(9).fill('');
 let xoTurn = 'X';
+let xoScore = {X:0, O:0};
+let xoWinLine = null;
 function xoMySymbol(){ return isHost ? 'X' : 'O'; }
-function initXOState(){ xoBoardArr = Array(9).fill(''); xoTurn = 'X'; }
+function initXOState(){ xoBoardArr = Array(9).fill(''); xoTurn = 'X'; xoWinLine = null; }
 function renderXO(){
   const b = $('#xoBoard'); b.innerHTML='';
   xoBoardArr.forEach((v,i)=>{
     const cell=document.createElement('div');
     cell.className='xoCell'; cell.textContent=v;
+    if(xoWinLine && xoWinLine.includes(i)) cell.style.background='#16a34a55';
     cell.onclick=()=>clickXO(i);
     b.appendChild(cell);
   });
-  $('#xoStatus').textContent = 'أنت: '+xoMySymbol()+' — دور: '+xoTurn;
+  $('#xoStatus').innerHTML = `أنت: ${xoMySymbol()} — دور: ${xoTurn||'-'}<br>النتيجة X: ${xoScore.X} | O: ${xoScore.O}`;
 }
 function clickXO(i){
   if(xoBoardArr[i] || xoTurn!==xoMySymbol()) return;
@@ -474,13 +477,17 @@ function clickXO(i){
 }
 function checkXOWin(){
   const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  for(const [a,b,c] of L){
+  for(const line of L){
+    const [a,b,c] = line;
     if(xoBoardArr[a] && xoBoardArr[a]===xoBoardArr[b] && xoBoardArr[b]===xoBoardArr[c]){
-      $('#xoStatus').textContent = '🏆 فاز '+xoBoardArr[a]+'!';
+      xoWinLine = line;
+      xoScore[xoBoardArr[a]]++;
+      $('#xoStatus').innerHTML = `🏆 فاز ${xoBoardArr[a]}!<br>النتيجة X: ${xoScore.X} | O: ${xoScore.O}`;
+      renderXO();
       xoTurn = null; return;
     }
   }
-  if(xoBoardArr.every(v=>v)){ $('#xoStatus').textContent='🤝 تعادل'; xoTurn=null; }
+  if(xoBoardArr.every(v=>v)){ $('#xoStatus').innerHTML = `🤝 تعادل<br>النتيجة X: ${xoScore.X} | O: ${xoScore.O}`; xoTurn=null; }
 }
 function resetXO(){
   initXOState();
@@ -493,6 +500,7 @@ const PIECE_ICON={wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚'
 let chessBoardArr = [];
 let chessTurn = 'w';
 let chessSelected = null;
+let chessCaptured = {w:[], b:[]};
 function chessMyColor(){ return isHost ? 'w' : 'b'; }
 function initChessState(){
   chessBoardArr = [
@@ -505,7 +513,7 @@ function initChessState(){
     ['wp','wp','wp','wp','wp','wp','wp','wp'],
     ['wr','wn','wb','wq','wk','wb','wn','wr']
   ];
-  chessTurn='w'; chessSelected=null;
+  chessTurn='w'; chessSelected=null; chessCaptured={w:[], b:[]};
 }
 function inBounds(r,c){ return r>=0&&r<8&&c>=0&&c<8; }
 function pieceMoves(r,c){
@@ -555,14 +563,27 @@ function renderChess(){
     for(let c=0;c<8;c++){
       const sq=document.createElement('div');
       sq.className='sq '+((r+c)%2===0?'sqL':'sqD');
+      sq.style.position='relative';
       if(chessSelected && chessSelected[0]===r && chessSelected[1]===c) sq.classList.add('sel');
       const p=chessBoardArr[r][c];
       if(p) sq.textContent=PIECE_ICON[p];
+      if(validMoves.some(m=>m[0]===r&&m[1]===c)){
+        const dot=document.createElement('div');
+        dot.style.cssText='position:absolute;width:10px;height:10px;border-radius:50%;background:'+(p?'#dc2626aa':'#4ade80aa')+';top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none';
+        if(p) { dot.style.width='100%'; dot.style.height='100%'; dot.style.borderRadius='0'; dot.style.background='transparent'; dot.style.boxShadow='inset 0 0 0 3px #dc2626aa'; }
+        sq.appendChild(dot);
+      }
       sq.onclick=()=>clickChessSq(r,c);
       b.appendChild(sq);
     }
   }
-  $('#chessStatus').textContent = 'أنت: '+(chessMyColor()==='w'?'أبيض':'أسود')+' — دور: '+(chessTurn==='w'?'أبيض':'أسود');
+  const myTurn = chessTurn===chessMyColor();
+  const capturedByMe = chessCaptured[chessMyColor()].map(p=>PIECE_ICON[p]).join(' ') || '—';
+  const capturedByOpp = chessCaptured[chessMyColor()==='w'?'b':'w'].map(p=>PIECE_ICON[p]).join(' ') || '—';
+  $('#chessStatus').innerHTML = `<div style="font-size:16px;font-weight:800;color:${myTurn?'#4ade80':'#94a3b8'}">${myTurn?'🟢 دورك الآن':'⏳ دور الخصم'}</div>
+    <div style="margin-top:8px">أنت: ${chessMyColor()==='w'?'أبيض':'أسود'}</div>
+    <div style="margin-top:6px;font-size:13px">قطع أسرتها من الخصم: ${capturedByMe}</div>
+    <div style="font-size:13px">قطعك اللي خسرتها: ${capturedByOpp}</div>`;
 }
 function clickChessSq(r,c){
   if(chessTurn!==chessMyColor()) return;
@@ -581,6 +602,8 @@ function clickChessSq(r,c){
 function makeChessMove(from,to,doBroadcast){
   const [fr,fc]=from,[tr,tc]=to;
   let piece=chessBoardArr[fr][fc];
+  const captured = chessBoardArr[tr][tc];
+  if(captured) chessCaptured[piece[0]].push(captured);
   chessBoardArr[tr][tc]=piece;
   chessBoardArr[fr][fc]='';
   if(piece[1]==='p' && (tr===0||tr===7)) chessBoardArr[tr][tc]=piece[0]+'q';
