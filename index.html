@@ -131,7 +131,9 @@ video{width:100%;max-width:430px;border-radius:16px;background:#000;margin-top:1
     <input id="vidUrl" placeholder="رابط فيديو mp4 أو YouTube">
     <button class="act green" onclick="playCinema(true)">عرض للجميع</button>
   </div>
+  <div id="cinemaSharedBy" style="width:100%;max-width:430px;color:#94a3b8;font-size:13px;margin-top:6px;display:none"></div>
   <div id="cinemaBox" style="width:100%;max-width:430px;margin-top:10px"></div>
+  <div id="cinemaHistoryBox" style="width:100%;max-width:430px;margin-top:16px"></div>
 </section>
 
 <!-- الإعدادات -->
@@ -674,7 +676,8 @@ function handle(d,from){
     if(d.on){liveFrom=from;$('#liveWho').textContent=d.name+' يبث الآن';$('#watchBox').style.display='block';toast('📡 بث مباشر من '+d.name);addNotif('📡 '+d.name+' بدأ بث مباشر');}
     else{liveFrom=null;$('#watchBox').style.display='none';$('#remVid').style.display='none';}
   }
-  if(d.type==='cinema'){ renderCinema(d.url); addNotif('🎬 تمت مشاركة فيديو للمشاهدة الجماعية'); }
+  if(d.type==='cinema'){ renderCinema(d.url, d.name); addNotif('🎬 '+(d.name||'شخص')+' شارك فيديو للمشاهدة الجماعية'); }
+  if(d.type==='cinema-ctrl') applyCinemaCtrl(d);
   if(d.type==='file'){ addFileEntry(d.name, d.dataUrl, d.from, false); addNotif('📁 ملف جديد من '+d.from+': '+d.name); }
   if(d.type==='game') handleGameMsg(d);
 }
@@ -771,16 +774,55 @@ function watchLive(){if(liveFrom){const c=peer.call(liveFrom,null,{metadata:{kin
   c.on('stream',s=>{$('#remVid').srcObject=s;$('#remVid').style.display='block';});}}
 
 /* ===== سينما ===== */
+let cinemaHistory = [];
+let cinemaIsSharer = false;
 function playCinema(share){
   const url=$('#vidUrl').value.trim(); if(!url)return;
-  renderCinema(url);
-  if(share)broadcast({type:'cinema',url});
+  cinemaIsSharer = true;
+  renderCinema(url, share ? 'أنت' : null);
+  if(share){
+    broadcast({type:'cinema',url,name:myName});
+    addToCinemaHistory(url);
+  }
 }
-function renderCinema(url){
+function renderCinema(url, sharedBy){
   const box=$('#cinemaBox'); let yt=url.match(/(?:youtu\.be\/|v=)([\w-]{11})/);
-  box.innerHTML = yt
-    ? '<iframe width="100%" height="240" src="https://www.youtube.com/embed/'+yt[1]+'" frameborder="0" allowfullscreen style="border-radius:16px"></iframe>'
-    : '<video controls autoplay src="'+url+'" style="display:block"></video>';
+  const sharedLabel = $('#cinemaSharedBy');
+  if(sharedBy){ sharedLabel.textContent = '🎬 يعرضه الآن: '+sharedBy; sharedLabel.style.display='block'; }
+  else sharedLabel.style.display='none';
+
+  if(yt){
+    box.innerHTML = '<iframe width="100%" height="240" src="https://www.youtube.com/embed/'+yt[1]+'" frameborder="0" allowfullscreen style="border-radius:16px"></iframe>';
+    return;
+  }
+  box.innerHTML = '<video id="cinemaVideo" controls autoplay src="'+url+'" style="display:block"></video>';
+  const v = $('#cinemaVideo');
+  if(cinemaIsSharer){
+    v.addEventListener('play',()=>broadcast({type:'cinema-ctrl',action:'play',time:v.currentTime}));
+    v.addEventListener('pause',()=>broadcast({type:'cinema-ctrl',action:'pause',time:v.currentTime}));
+    v.addEventListener('seeked',()=>broadcast({type:'cinema-ctrl',action:'seek',time:v.currentTime}));
+  }
+}
+function applyCinemaCtrl(d){
+  const v = $('#cinemaVideo'); if(!v) return;
+  if(d.action==='play'){ v.currentTime=d.time; v.play(); }
+  if(d.action==='pause'){ v.currentTime=d.time; v.pause(); }
+  if(d.action==='seek'){ v.currentTime=d.time; }
+}
+function addToCinemaHistory(url){
+  cinemaHistory = cinemaHistory.filter(u=>u!==url);
+  cinemaHistory.unshift(url);
+  if(cinemaHistory.length>5) cinemaHistory.pop();
+  renderCinemaHistory();
+}
+function renderCinemaHistory(){
+  const box = $('#cinemaHistoryBox');
+  if(cinemaHistory.length===0){ box.innerHTML=''; return; }
+  box.innerHTML = '<div style="color:#94a3b8;font-size:13px;margin-bottom:8px">آخر الروابط</div>' +
+    cinemaHistory.map(u=>`<div class="box" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px">${u.replace(/</g,'&lt;')}</span>
+      <button class="act" style="width:auto;padding:6px 14px" onclick="$('#vidUrl').value='${u.replace(/'/g,'')}';playCinema(true)">عرض</button>
+    </div>`).join('');
 }
 $('#txt').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
 </script>
